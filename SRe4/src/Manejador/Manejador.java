@@ -13,6 +13,7 @@ import com.mongodb.DBCollection;
 import com.mongodb.DBCursor;
 import com.mongodb.DBObject;
 import com.mongodb.MongoClient;
+import com.mongodb.MongoException;
 import com.mongodb.ReadPreference;
 import java.net.UnknownHostException;
 import java.util.Vector;
@@ -52,7 +53,14 @@ public class Manejador {
         doc.append("idUsuario", idU);
         doc.append("idVideo", idV);
         DBCollection coll1 = getConexion().getCollection("recomendaciones");
-        coll1.insert(doc);
+        coll1.ensureIndex(doc, new BasicDBObject("unique", true));
+
+        try {
+            coll1.insert(doc);
+        } catch (MongoException.DuplicateKey e) {
+            System.out.println("ya existe la recomendacion");
+            }
+        
 
     }
 
@@ -77,7 +85,8 @@ public class Manejador {
         return competencias;
     }
 
-    public Vector filtroContenido(Vector competenciass) throws UnknownHostException {        
+    public Vector filtroContenido(Vector competenciass) throws UnknownHostException {
+        int numlikes = 20; //numero minimo de likes del video
         DBCollection coll = obtenerColeccion("videos"); //descripciones guardadas en coll
         BasicDBList or = new BasicDBList();
         if (competenciass.get(0).equals(1)) {
@@ -116,8 +125,8 @@ public class Manejador {
         or.add(clause7);
         or.add(clause8);
 
-        DBObject query1 = new BasicDBObject("$or", or);
-        DBCursor cursor = coll.find(query1);
+        DBObject query = new BasicDBObject("$or", or).append("like", new BasicDBObject("$gt", numlikes));;
+        DBCursor cursor = coll.find(query);
         int i = 1;
         Vector<Video> datos = new Vector();
         while (cursor.hasNext()) {
@@ -128,7 +137,7 @@ public class Manejador {
             String competencias = (String) obj.get("competencias").toString();
             String[] tokens;
             tokens = parsearTexto(competencias); //eliminar llaves, comillas y comas
-            Vector temp = new Vector(); //vector para guardar actores
+            Vector temp = new Vector(); //vector para guardar competencias
 
             for (int cont = 0; cont < tokens.length; cont++) {
                 temp.add(tokens[cont]);
@@ -139,7 +148,7 @@ public class Manejador {
             String keywords = (String) obj.get("keywords").toString();
             String[] tokens2;
             tokens2 = parsearTexto(keywords); //eliminar llaves, comillas y comas
-            Vector temp2 = new Vector(); //vector para guardar actores
+            Vector temp2 = new Vector(); //vector para guardar keywords
 
             for (int cont2 = 0; cont2 < tokens2.length; cont2++) {
                 temp2.add(tokens2[cont2]);
