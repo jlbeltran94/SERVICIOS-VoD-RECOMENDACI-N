@@ -35,7 +35,7 @@ public class SRe4 {
     public static void main(String[] args) throws UnknownHostException, ParseException {
         Manejador man = new Manejador();
         Vector<Video> datos = new Vector();
-        
+
         double umbralSimilitud = 0.4;
         /**
          * * ******************************
@@ -95,25 +95,19 @@ public class SRe4 {
         calcularSimilitud(datoscomp);
         System.out.println("ingrese un IdUsuario: ");
         int idU = in.nextInt(); // Reading from System.in        
-        
 
         datos = man.filtroContenido(man.obtenerCompetencias(idU, umbralSimilitud));
-        
-        
-        
 
         for (int l = 0; l < datos.size(); l++) {
             man.insertarRecomendaciones(idU, datos.get(l).getId());
-        }        
-        
-        
-        
+        }
 
     }
 
     public static void calcularSimilitud(Vector<Competencia> datos) throws UnknownHostException, ParseException {
         int cont;
         Manejador man1 = new Manejador();
+        Vector similitudes = new Vector();
         DBCollection coll1 = man1.getConexion().getCollection("competencias");
         DBCursor cursor = coll1.find();
         double sim;
@@ -122,7 +116,7 @@ public class SRe4 {
 
             for (int j = i + 1; j < datos.size(); j++) {  //comparación entre una posición del vector y la siguiente, es decir, entre la información de un contenido y el siguiente              
                 cont = 0;
-                
+
                 if (datos.get(i).getId().equals(datos.get(j).getId())) {
                     cont++;
                 }
@@ -130,19 +124,19 @@ public class SRe4 {
                 if (datos.get(i).getTitle().equals(datos.get(j).getTitle())) {
                     cont++; //registra las similitudes entre la información de un contenido y el siguiente
                 }
-                
+
                 if (datos.get(i).getLevelScheme().equals(datos.get(j).getLevelScheme())) {
                     cont++;
                 }
-                
+
                 if (datos.get(i).getLevel() == datos.get(j).getLevel()) {
                     cont++;
                 }
-                
+
                 if (datos.get(i).getCompetencyType().equals(datos.get(j).getCompetencyType())) {
                     cont++;
                 }
-                
+
                 for (int k = 0; k < datos.get(i).getActionVerb().size(); k++) { //verificación cruzada entre competencias, por eso un for dentro de otro
                     for (int l = 0; l < datos.get(j).getActionVerb().size(); l++) {
                         if (datos.get(i).getActionVerb().get(k).equals(datos.get(j).getActionVerb().get(l))) {
@@ -150,7 +144,7 @@ public class SRe4 {
                         }
                     }
                 }
-                
+
                 for (int k = 0; k < datos.get(i).getTopic().size(); k++) { //verificación cruzada entre Topic, por eso un for dentro de otro
                     for (int l = 0; l < datos.get(j).getTopic().size(); l++) {
                         if (datos.get(i).getTopic().get(k).equals(datos.get(j).getTopic().get(l))) {
@@ -158,41 +152,50 @@ public class SRe4 {
                         }
                     }
                 }
-                
+
                 if (datos.get(i).getIntendedUserRole().equals(datos.get(j).getIntendedUserRole())) {
                     cont++;
                 }
-                
+
                 if (datos.get(i).getTypicalAgeRange().equals(datos.get(j).getTypicalAgeRange())) {
                     cont++;
                 }
-                
+
                 if (datos.get(i).getDifficulty().equals(datos.get(j).getDifficulty())) {
                     cont++;
                 }
-                
+
                 if (datos.get(i).getTypicalLearningTime() == datos.get(j).getTypicalLearningTime()) {
                     cont++;
                 }
-                
+
                 if (datos.get(i).getLanguge().equals(datos.get(j).getLanguge())) {
                     cont++;
                 }
-                
+
                 for (int k = 0; k < datos.get(i).getKeywords().size(); k++) { //verificación cruzada entre keywords, por eso un for dentro de otro
                     for (int l = 0; l < datos.get(j).getKeywords().size(); l++) {
                         if (datos.get(i).getKeywords().get(k).equals(datos.get(j).getKeywords().get(l))) {
                             cont++;
                         }
                     }
-                }             
+                }
 
                 sim = (2.0 * cont) / (19 + datos.get(i).getActionVerb().size() + datos.get(j).getActionVerb().size() + datos.get(i).getKeywords().size() + datos.get(j).getKeywords().size() + datos.get(j).getTopic().size() + datos.get(i).getTopic().size() + datos.get(j).getTopic().size());
                 System.out.println("La similitud de " + datos.get(i).getId() + "|" + datos.get(j).getId() + " es " + sim);
-                man1.insertarDocumento(datos.get(i).getId(), datos.get(j).getId(), sim);   //registra las similitudes en la colección similitudes        
+                //man1.insertarDocumento(datos.get(i).getId(), datos.get(j).getId(), sim);   //registra las similitudes en la colección similitudes        
+                BasicDBObject doc = new BasicDBObject();
+                doc.append("id1", datos.get(i).getId());
+                doc.append("id2", datos.get(j).getId());
+                doc.append("similitud", sim);                
+                similitudes.add(doc);                
             }
             System.out.println("*****************************");
         }
+        DBCollection colle = man1.getConexion().getCollection("similitudes");
+        colle.insert(similitudes);
     }
+
+    
 
 }
