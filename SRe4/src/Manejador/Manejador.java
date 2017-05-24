@@ -47,142 +47,85 @@ public class Manejador {
         coll.drop();
     }
 
-    public void insertarRecomendaciones(int idU, int idV) throws UnknownHostException {
+    public void insertarRecomendaciones(int idU, String idV, String tipo) throws UnknownHostException {
         //System.out.println("entro al metodo");
         BasicDBObject doc = new BasicDBObject();
         doc.append("idUsuario", idU);
         doc.append("idVideo", idV);
+        doc.append("tipo", tipo);
         DBCollection coll1 = getConexion().getCollection("recomendaciones");
-        coll1.ensureIndex(doc, new BasicDBObject("unique", true));
+        //coll1.ensureIndex(doc, new BasicDBObject("unique", true));
+
+        BasicDBObject doc2 = new BasicDBObject();
+        doc2.append("idUsuario", idU);
+        doc2.append("idVideo", 1);
+        coll1.ensureIndex(doc2, new BasicDBObject("unique", true));
 
         try {
             coll1.insert(doc);
         } catch (MongoException.DuplicateKey e) {
-            
+
         }
 
-    }
-
-    public Vector obtenerCompetencias(int idUsuario, double umbralSimilitud) throws UnknownHostException {
-        DBCollection coll1 = getConexion().getCollection("usuarios");
-        Vector competencias = new Vector();
-        DBObject usuario = new BasicDBObject("_id", idUsuario);
-        DBCursor cursor = coll1.find(usuario);
-        DBObject obj = cursor.next();
-
-        if (obj.get("competencia1").equals(1)) {
-            competencias.add("Competencia1");
-        }
-
-        if (obj.get("competencia2").equals(1)) {
-            competencias.add("Competencia2");
-        }
-
-        if (obj.get("competencia3").equals(1)) {
-            competencias.add("Competencia3");
-        }
-
-        if (obj.get("competencia4").equals(1)) {
-            competencias.add("Competencia4");
-        }
-
-        if (obj.get("competencia5").equals(1)) {
-            competencias.add("Competencia5");
-        }
-
-        if (obj.get("competencia6").equals(1)) {
-            competencias.add("Competencia6");
-        }
-
-        competencias.add(obj.get("deficit1"));
-        competencias.add(obj.get("deficit2"));
-
-        /**
-         * ****************************************
-         */
-        BasicDBList or = new BasicDBList();
-        for (int i = 0; i < competencias.size(); i++) {
-            DBObject clause = new BasicDBObject("id1", competencias.get(i));
-            DBObject clause2 = new BasicDBObject("id2", competencias.get(i));
-            or.add(clause);
-            or.add(clause2);
-        }
-        DBObject query = new BasicDBObject("$or", or).append("similitud", new BasicDBObject("$gt", umbralSimilitud));
-        DBCollection coll2 = getConexion().getCollection("similitudes");
-        DBCursor cursor2 = coll2.find(query, new BasicDBObject("id2", true).append("id1", true).append("_id", false)); //de los docmentos encontrados, eliminamos _id de cada documento porque no lo necesitamos, y dejamos sólo id1 e id2
-
-        int n = 0;
-        while (cursor2.hasNext()) {
-            DBObject obj1 = cursor2.next();
-            if (competencias.contains(obj1.get("id1"))) {
-            } else {
-                competencias.add(obj1.get("id1"));
-            }
-
-            if (competencias.contains(obj1.get("id2"))) {
-            } else {
-                competencias.add(obj1.get("id2"));
-            }
-
-            n++;
-        }
-
-        System.out.println("Competencias: " + competencias);
-
-        /******************************************/
-        return competencias;
     }
 
     public Vector filtroContenido(Vector competenciass) throws UnknownHostException {
-        int numlikes = 20; //numero minimo de likes del video
-        DBCollection coll = obtenerColeccion("videos"); //descripciones guardadas en coll
-        BasicDBList or = new BasicDBList();
-
-        for (int i = 0; i < competenciass.size(); i++) {
-            DBObject clause = new BasicDBObject("competencias", competenciass.get(i));
-            or.add(clause);
-        }
-
-        DBObject query = new BasicDBObject("$or", or).append("like", new BasicDBObject("$gt", numlikes));;
-        DBCursor cursor = coll.find(query);
-        int i = 1;
         Vector<Video> datos = new Vector();
-        while (cursor.hasNext()) {
-            DBObject obj = cursor.next();
-            Video p = new Video();
-            p.setId((int) obj.get("_id"));
-            p.setNombre((String) obj.get("nombre"));
-            String competencias = (String) obj.get("competencias").toString();
-            String[] tokens;
-            tokens = parsearTexto(competencias); //eliminar llaves, comillas y comas
-            Vector temp = new Vector(); //vector para guardar competencias
+        if (competenciass.isEmpty()) {
+            return datos;
+        } else {
+            int numdislikes = 30; //numero maximo de dislikes del video
+            DBCollection coll = obtenerColeccion("videos"); //descripciones guardadas en coll
+            BasicDBList or = new BasicDBList();
 
-            for (int cont = 0; cont < tokens.length; cont++) {
-                temp.add(tokens[cont]);
+            for (int i = 0; i < competenciass.size(); i++) {
+                DBObject clause = new BasicDBObject("competencias", competenciass.get(i));
+                or.add(clause);
             }
-            p.setCompetencia(temp);
-            p.setLike((int) obj.get("like"));
-            p.setDislike((int) obj.get("dislike"));
-            String keywords = (String) obj.get("keywords").toString();
-            String[] tokens2;
-            tokens2 = parsearTexto(keywords); //eliminar llaves, comillas y comas
-            Vector temp2 = new Vector(); //vector para guardar keywords
 
-            for (int cont2 = 0; cont2 < tokens2.length; cont2++) {
-                temp2.add(tokens2[cont2]);
+            DBObject query = new BasicDBObject("$or", or).append("dislike", new BasicDBObject("$lt", numdislikes));;
+            DBCursor cursor = coll.find(query);
+            int i = 1;
+
+            while (cursor.hasNext()) {
+                DBObject obj = cursor.next();
+                Video p = new Video();
+                p.setId((String) obj.get("_id").toString());
+                p.setIid((String) obj.get("Id"));
+                p.setNombre((String) obj.get("nombre"));
+                String competencias = (String) obj.get("competencias").toString();
+                String[] tokens;
+                tokens = parsearTexto(competencias); //eliminar llaves, comillas y comas
+                Vector temp = new Vector(); //vector para guardar competencias
+
+                for (int cont = 0; cont < tokens.length; cont++) {
+                    temp.add(tokens[cont]);
+                }
+                p.setCompetencia(temp);
+                p.setLike((int) obj.get("like"));
+                p.setDislike((int) obj.get("dislike"));
+                String keywords = (String) obj.get("keywords").toString();
+                String[] tokens2;
+                tokens2 = parsearTexto(keywords); //eliminar llaves, comillas y comas
+                Vector temp2 = new Vector(); //vector para guardar keywords
+
+                for (int cont2 = 0; cont2 < tokens2.length; cont2++) {
+                    temp2.add(tokens2[cont2]);
+                }
+                p.setKeywords(temp2);
+                datos.add(p); //aquí se va incluyendo la info de los contenidos en el vector datos
+                i++;
             }
-            p.setKeywords(temp2);
-            datos.add(p); //aquí se va incluyendo la info de los contenidos en el vector datos
-            i++;
-        }
-        for (int j = 0; j < datos.size(); j++) {
-            System.out.println("*****************************");
-            System.out.println("Video " + (j+1));
-            System.out.println(datos.get(j).getNombre());
-            System.out.println("competencias" + datos.get(j).getCompetencias());
+            for (int j = 0; j < datos.size(); j++) {
+                System.out.println("*****************************");
+                System.out.println("Recomendacion " + (j + 1));
+                System.out.println("_id: " + datos.get(j).getId());
+                System.out.println("Nombre: " + datos.get(j).getNombre());
+                System.out.println("competencias: " + datos.get(j).getCompetencias());
 
+            }
+            return datos;
         }
-        return datos;
     }
 
     public static String[] parsearTexto(String actores) {
@@ -205,7 +148,7 @@ public class Manejador {
         BasicDBObject doc2 = new BasicDBObject();
         doc2.append("id1", 1);
         doc2.append("id2", 1);
-        doc.append("similitud", sim);
+        doc2.append("similitud", sim);
 
         DBCollection coll1 = getConexion().getCollection("similitudes");
         coll1.ensureIndex(doc2, new BasicDBObject("unique", true));
@@ -213,9 +156,139 @@ public class Manejador {
         try {
             coll1.insert(doc);
         } catch (MongoException.DuplicateKey e) {
-            
+
         }
 
+    }
+
+    public Vector obtenerCompetencias2(int idUsuario) throws UnknownHostException {
+        DBCollection coll1 = getConexion().getCollection("usuarios");
+        Vector competencias = new Vector();
+        DBObject usuario = new BasicDBObject("_id", idUsuario);
+        DBCursor cursor = coll1.find(usuario);
+        DBObject obj = cursor.next();
+        /**
+         *
+         */
+        for (DBObject doc : cursor) {
+            DBObject competencia = (BasicDBObject) doc.get("competencia1");
+            if (competencia.get("value").equals(1)) {
+                competencias.add(competencia.get("Id").toString());
+            }
+        }
+        for (DBObject doc : cursor) {
+            DBObject competencia = (BasicDBObject) doc.get("competencia2");
+            if (competencia.get("value").equals(1)) {
+                competencias.add(competencia.get("Id").toString());
+            }
+        }
+        for (DBObject doc : cursor) {
+            DBObject competencia = (BasicDBObject) doc.get("competencia3");
+            if (competencia.get("value").equals(1)) {
+                competencias.add(competencia.get("Id").toString());
+            }
+        }
+        for (DBObject doc : cursor) {
+            DBObject competencia = (BasicDBObject) doc.get("competencia4");
+            if (competencia.get("value").equals(1)) {
+                competencias.add(competencia.get("Id").toString());
+            }
+        }
+        for (DBObject doc : cursor) {
+            DBObject competencia = (BasicDBObject) doc.get("competencia5");
+            if (competencia.get("value").equals(1)) {
+                competencias.add(competencia.get("Id").toString());
+            }
+        }
+        for (DBObject doc : cursor) {
+            DBObject competencia = (BasicDBObject) doc.get("competencia6");
+            if (competencia.get("value").equals(1)) {
+                competencias.add(competencia.get("Id").toString());
+            }
+        }
+        competencias.add(obj.get("deficit1").toString());
+        competencias.add(obj.get("deficit2").toString());
+
+        System.out.println("*********************************");
+        System.out.println("Competencias Usuario: " + competencias);
+
+        return competencias;
+    }
+
+    public Vector obtenersimilcomp(Vector competencias, double umbralSimilitud) throws UnknownHostException {
+        Vector competenciassimil = new Vector();
+        if (competencias.isEmpty()) {
+            return competenciassimil;
+        } else {
+            /**
+             * ****************************************
+             */
+
+            BasicDBList or = new BasicDBList();
+            for (int i = 0; i < competencias.size(); i++) {
+                DBObject clause = new BasicDBObject("id1", competencias.get(i));
+                DBObject clause2 = new BasicDBObject("id2", competencias.get(i));
+                or.add(clause);
+                or.add(clause2);
+            }
+            DBObject query = new BasicDBObject("$or", or).append("similitud", new BasicDBObject("$gt", umbralSimilitud));
+            DBCollection coll2 = getConexion().getCollection("similitudes");
+            DBCursor cursor2 = coll2.find(query, new BasicDBObject("id2", true).append("id1", true).append("_id", false)); //de los docmentos encontrados, eliminamos _id de cada documento porque no lo necesitamos, y dejamos sólo id1 e id2
+
+            int n = 0;
+            while (cursor2.hasNext()) {
+                DBObject obj1 = cursor2.next();
+                if (competencias.contains(obj1.get("id1"))) {
+                } else {
+                    competenciassimil.add(obj1.get("id1").toString());
+                }
+
+                if (competencias.contains(obj1.get("id2"))) {
+                } else {
+                    competenciassimil.add(obj1.get("id2").toString());
+                }
+
+                n++;
+            }
+            System.out.println("*********************************");
+            System.out.println("Competencias Similares: " + competenciassimil);
+
+            /**
+             * ***************************************
+             */
+            return competenciassimil;
+        }
+    }
+
+    public Vector obtenerCompetencias3(int idUsuario) throws UnknownHostException {
+        DBCollection coll1 = getConexion().getCollection("usuarios");
+        Vector competencias = new Vector();
+        DBObject usuario = new BasicDBObject("_id", idUsuario);
+        DBCursor cursor = coll1.find(usuario);
+        DBObject obj = cursor.next();
+        /**
+         *
+         */
+        for (DBObject doc : cursor) {
+            BasicDBList comps = (BasicDBList) doc.get("competencias");
+            /* if (competencia.get("value").equals(1)) {
+             competencias.add(competencia.get("Id").toString());
+             }*/
+            for (int i = 0; i < comps.size(); i++) {
+                BasicDBObject competencia = (BasicDBObject) comps.get(i);
+
+                if (Float.parseFloat(competencia.get("value").toString()) < 3.5) {
+
+                    competencias.add(competencia.get("Id"));
+                }
+            }
+        }
+
+        System.out.println("*********************************");
+        System.out.println("Usuario" + idUsuario);
+        System.out.println("Competencias Usuario: " + competencias);
+
+        return competencias;
     }
 
     /*public Vector obtenerTopSimilitudes(Vector competencias, double umbralSimilitud) throws UnknownHostException {
@@ -265,7 +338,66 @@ public class Manejador {
      * BasicDBObject("$gt",umbralSimilitud)); //cadena de consulta,
      * identificadores en id1 o id2, y similitud por encima de umbralSimilitud
      * rec=man.obtenerTopSimilitudes(topratings.get(i),umbralSimilitud,query1);
-     * //obtenerTopSimilitudes recomendaciones.add(rec); }         
-    }**
+     * //obtenerTopSimilitudes recomendaciones.add(rec); } }**
+     *
+     * /*
+     *
+     * public Vector obtenerCompetencias(int idUsuario, double umbralSimilitud)
+     * throws UnknownHostException { DBCollection coll1 =
+     * getConexion().getCollection("usuarios"); Vector competencias = new
+     * Vector(); DBObject usuario = new BasicDBObject("_id", idUsuario);
+     * DBCursor cursor = coll1.find(usuario); DBObject obj = cursor.next();
+     *
+     * if (obj.get("competencia1").equals(1)) {
+     * competencias.add("Competencia1"); }
+     *
+     * if (obj.get("competencia2").equals(1)) {
+     * competencias.add("Competencia2"); }
+     *
+     * if (obj.get("competencia3").equals(1)) {
+     * competencias.add("Competencia3"); }
+     *
+     * if (obj.get("competencia4").equals(1)) {
+     * competencias.add("Competencia4"); }
+     *
+     * if (obj.get("competencia5").equals(1)) {
+     * competencias.add("Competencia5"); }
+     *
+     * if (obj.get("competencia6").equals(1)) {
+     * competencias.add("Competencia6"); }
+     *
+     * competencias.add(obj.get("deficit1"));
+     * competencias.add(obj.get("deficit2"));
+     *
+     * /**
+     * ****************************************
+     *
+     * BasicDBList or = new BasicDBList(); for (int i = 0; i <
+     * competencias.size(); i++) { DBObject clause = new BasicDBObject("id1",
+     * competencias.get(i)); DBObject clause2 = new BasicDBObject("id2",
+     * competencias.get(i)); or.add(clause); or.add(clause2); } DBObject query =
+     * new BasicDBObject("$or", or).append("similitud", new BasicDBObject("$gt",
+     * umbralSimilitud)); DBCollection coll2 =
+     * getConexion().getCollection("similitudes"); DBCursor cursor2 =
+     * coll2.find(query, new BasicDBObject("id2", true).append("id1",
+     * true).append("_id", false)); //de los docmentos encontrados, eliminamos
+     * _id de cada documento porque no lo necesitamos, y dejamos sólo id1 e id2
+     *
+     * int n = 0; while (cursor2.hasNext()) { DBObject obj1 = cursor2.next(); if
+     * (competencias.contains(obj1.get("id1"))) { } else {
+     * competencias.add(obj1.get("id1")); }
+     *
+     * if (competencias.contains(obj1.get("id2"))) { } else {
+     * competencias.add(obj1.get("id2")); }
+     *
+     * n++; }
+     *
+     * System.out.println("Competencias: " + competencias);
+     *
+     * /**
+     * ***************************************
+     *
+     * return competencias; } **
+     *
      */
 }

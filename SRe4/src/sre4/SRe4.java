@@ -11,8 +11,11 @@ import com.mongodb.BasicDBObject;
 import com.mongodb.DBCollection;
 import com.mongodb.DBCursor;
 import com.mongodb.DBObject;
+import com.mongodb.MongoException;
 import java.net.UnknownHostException;
+import java.util.Arrays;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Scanner;
 import java.util.Vector;
 import op.Competencia;
@@ -34,11 +37,9 @@ public class SRe4 {
      */
     public static void main(String[] args) throws UnknownHostException, ParseException {
         Manejador man = new Manejador();
-        Vector<Video> datos = new Vector();
-
-        double umbralSimilitud = 0.4;
+        double umbralSimilitud = 0.5;
         /**
-         * * ******************************
+         * ******************************
          */
         DBCollection coll = man.obtenerColeccion("competencias"); //descripciones guardadas en coll
         DBCursor cursor = coll.find();
@@ -55,7 +56,7 @@ public class SRe4 {
             String ActionVerb = (String) obj.get("ActionVerb").toString();
             String[] tokens;
             tokens = man.parsearTexto(ActionVerb); //eliminar llaves, comillas y comas
-            Vector temp = new Vector(); //vector para guardar actores
+            Vector temp = new Vector(); //vector para guardar actionverb
 
             for (int cont = 0; cont < tokens.length; cont++) {
                 temp.add(tokens[cont]);
@@ -64,7 +65,7 @@ public class SRe4 {
             String Topic = (String) obj.get("Topic").toString();
             String[] tokens3;
             tokens3 = man.parsearTexto(Topic); //eliminar llaves, comillas y comas
-            Vector temp3 = new Vector(); //vector para guardar actores
+            Vector temp3 = new Vector(); //vector para guardar Topic
 
             for (int cont = 0; cont < tokens3.length; cont++) {
                 temp3.add(tokens3[cont]);
@@ -78,7 +79,7 @@ public class SRe4 {
             String Keywords = (String) obj.get("Keywords").toString();
             String[] tokens2;
             tokens2 = man.parsearTexto(Keywords); //eliminar llaves, comillas y comas
-            Vector temp2 = new Vector(); //vector para guardar actores
+            Vector temp2 = new Vector(); //vector para guardar keywords
 
             for (int cont2 = 0; cont2 < tokens2.length; cont2++) {
                 temp2.add(tokens2[cont2]);
@@ -89,30 +90,56 @@ public class SRe4 {
         }
 
         /**
-         * ******************************
+         * *************************************************************************************
          */
-        Scanner in = new Scanner(System.in);
         calcularSimilitud(datoscomp);
-        System.out.println("ingrese un IdUsuario: ");
-        int idU = in.nextInt(); // Reading from System.in        
+        DBCollection coll2 = man.obtenerColeccion("usuarios");
+        DBCursor cursor2 = coll2.find();
+        while (cursor2.hasNext()) {
+            DBObject obj = cursor2.next();
+            Vector<Video> datos = new Vector();
+            Vector<Video> datos2 = new Vector();
+            Vector<Competencia> competenciasusr = new Vector();
+            int idU = Integer.parseInt(obj.get("_id").toString());
+            competenciasusr = man.obtenerCompetencias3(idU);
+            datos = man.filtroContenido(competenciasusr);
+            datos2 = man.filtroContenido(man.obtenersimilcomp(competenciasusr, umbralSimilitud));
 
-        datos = man.filtroContenido(man.obtenerCompetencias(idU, umbralSimilitud));
-
-        for (int l = 0; l < datos.size(); l++) {
-            man.insertarRecomendaciones(idU, datos.get(l).getId());
+            for (int l = 0; l < datos.size(); l++) {
+                man.insertarRecomendaciones(idU, datos.get(l).getIid(), "Directa");
+            }
+            for (int l = 0; l < datos2.size(); l++) {
+                man.insertarRecomendaciones(idU, datos2.get(l).getIid(), "Por Similitud");
+            }
         }
-
+        /*Scanner in = new Scanner(System.in);
+         System.out.println("ingrese un IdUsuario: ");
+         int idU = in.nextInt(); // Reading from System.in  
+         man.obtenerCompetencias3(idU);
+         */
+        //man.obtenerCompetencias2(idU, umbralSimilitud);
     }
 
     public static void calcularSimilitud(Vector<Competencia> datos) throws UnknownHostException, ParseException {
         int cont;
         Manejador man1 = new Manejador();
+        DBCollection colle = man1.getConexion().getCollection("similitudes");
+        DBObject queryusr = new BasicDBObject();
+        DBCursor cursor2 = colle.find(queryusr, new BasicDBObject("_id", false));
+        /**
+         * **************************************
+         */
+        // Vector similitudesdb = new Vector();
+        //List<DBObject> array = cursor2.toArray();
+        //similitudesdb.addAll(array);
+
+        /**
+         * *************************************
+         */
         Vector similitudes = new Vector();
-        DBCollection coll1 = man1.getConexion().getCollection("competencias");
-        DBCursor cursor = coll1.find();
         double sim;
         for (int i = 0; i < datos.size(); i++) {
-            System.out.println("*****************************");
+            //System.out.println("*****************************");
 
             for (int j = i + 1; j < datos.size(); j++) {  //comparación entre una posición del vector y la siguiente, es decir, entre la información de un contenido y el siguiente              
                 cont = 0;
@@ -182,20 +209,31 @@ public class SRe4 {
                 }
 
                 sim = (2.0 * cont) / (19 + datos.get(i).getActionVerb().size() + datos.get(j).getActionVerb().size() + datos.get(i).getKeywords().size() + datos.get(j).getKeywords().size() + datos.get(j).getTopic().size() + datos.get(i).getTopic().size() + datos.get(j).getTopic().size());
-                System.out.println("La similitud de " + datos.get(i).getId() + "|" + datos.get(j).getId() + " es " + sim);
+                // System.out.println("La similitud de " + datos.get(i).getId() + "|" + datos.get(j).getId() + " es " + sim);
                 //man1.insertarDocumento(datos.get(i).getId(), datos.get(j).getId(), sim);   //registra las similitudes en la colección similitudes        
+
                 BasicDBObject doc = new BasicDBObject();
+                BasicDBObject doc2 = new BasicDBObject();
                 doc.append("id1", datos.get(i).getId());
                 doc.append("id2", datos.get(j).getId());
                 doc.append("similitud", sim);                
-                similitudes.add(doc);                
-            }
-            System.out.println("*****************************");
-        }
-        DBCollection colle = man1.getConexion().getCollection("similitudes");
-        colle.insert(similitudes);
-    }
+                
 
-    
+                if (cursor2.toArray().contains(doc)) {
+                } else {
+                    similitudes.add(doc);
+                }
+            }
+            //System.out.println("*****************************");
+        }
+
+        try {
+            colle.insert(similitudes);
+        } catch (MongoException.DuplicateKey e) {
+        }
+        /**
+         * **************************
+         */
+    }
 
 }
