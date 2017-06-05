@@ -4,28 +4,22 @@ import java.util.Vector;
 
 public class Video {
 
-    private String _id;
-    private String Iid;
+    
+    private String Id;
     private String nombre;
     private Vector competencias;
     private int like;
     private int dislike;
     private Vector keywords;
 
+    
+
     public String getId() {
-        return _id;
+        return Id;
     }
 
-    public void setId(String id) {
-        this._id = id;
-    }
-
-    public String getIid() {
-        return Iid;
-    }
-
-    public void setIid(String Iid) {
-        this.Iid = Iid;
+    public void setId(String Id) {
+        this.Id = Id;
     }
 
     public String getNombre() {

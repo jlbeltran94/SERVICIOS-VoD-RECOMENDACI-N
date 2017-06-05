@@ -13,85 +13,100 @@ import com.mongodb.DBCollection;
 import com.mongodb.DBCursor;
 import com.mongodb.DBObject;
 import com.mongodb.MongoClient;
+import com.mongodb.MongoClientURI;
+import com.mongodb.client.MongoDatabase;
+import com.mongodb.client.MongoCollection;
 import com.mongodb.MongoException;
+import com.mongodb.MongoWriteException;
 import com.mongodb.ReadPreference;
+import com.mongodb.client.MongoCursor;
+import com.mongodb.client.model.IndexOptions;
+import com.mongodb.client.model.Indexes;
 import java.net.UnknownHostException;
+import java.util.List;
 import java.util.Vector;
+import org.bson.Document;
 
 /**
  *
  * @author jlbel
  */
 public class Manejador {
+    
+    public MongoDatabase getConexion() throws UnknownHostException {//conexion BD
 
-    public DB getConexion() throws UnknownHostException {
-        MongoClient MongoClient = new MongoClient("localhost", 27017);
-        DB db = MongoClient.getDB("video");
+        /*conexion a mlab ********************/
+        MongoClientURI uri = new MongoClientURI("mongodb://jlbeltranc:3002028690jb@ds155811.mlab.com:55811/vod_enfasis4");
+        MongoClient MongoClient = new MongoClient(uri);
+        MongoDatabase db = MongoClient.getDatabase(uri.getDatabase());
+        // conexion local
+        //MongoClient mongoClient = new MongoClient("localhost", 27017);
+        //MongoDatabase db = mongoClient.getDatabase("video");
         return db;
     }
 
-    public DBCollection obtenerColeccion(String collection) throws UnknownHostException {
-        DBCollection coll = getConexion().getCollection(collection);
+    public MongoCollection<Document> obtenerColeccion(String collection) throws UnknownHostException {
+        MongoCollection<Document> coll = getConexion().getCollection(collection);//obtener la coleccion que se quiere
         return coll;
     }
 
     public int numerodocumentos(String collection) throws UnknownHostException {
-        DBCollection coll = getConexion().getCollection(collection);
-        int num = (int) coll.count();
+        MongoCollection<Document> coll = getConexion().getCollection(collection);
+        int num = (int) coll.count();//numero de documentos en la coleccion
         return num;
     }
 
-    public void borrarDocumentos(String collection) throws UnknownHostException {
+    public void borrarDocumentos(String collection) throws UnknownHostException {//eliminar coleccion
 
-        DBCollection coll = getConexion().getCollection(collection);
+        MongoCollection<Document> coll = getConexion().getCollection(collection);
         coll.drop();
     }
 
-    public void insertarRecomendaciones(int idU, String idV, String tipo) throws UnknownHostException {
-        //System.out.println("entro al metodo");
-        BasicDBObject doc = new BasicDBObject();
+    public void insertarRecomendaciones(int idU, String idV, String tipo, MongoDatabase BD) throws UnknownHostException {
+        //inserta recomendaciones en la coleccion recomendaciones
+        Document doc = new Document();
         doc.append("idUsuario", idU);
         doc.append("idVideo", idV);
         doc.append("tipo", tipo);
-        DBCollection coll1 = getConexion().getCollection("recomendaciones");
-        //coll1.ensureIndex(doc, new BasicDBObject("unique", true));
+        MongoCollection<Document> coll1 = BD.getCollection("recomendaciones");
 
+        //se crea indice unico para la recomendacion y que no se repita
         BasicDBObject doc2 = new BasicDBObject();
         doc2.append("idUsuario", idU);
         doc2.append("idVideo", 1);
-        coll1.ensureIndex(doc2, new BasicDBObject("unique", true));
+        IndexOptions indexOptions = new IndexOptions().unique(true);
+        coll1.createIndex(doc2, indexOptions);
 
         try {
-            coll1.insert(doc);
-        } catch (MongoException.DuplicateKey e) {
-
+            coll1.insertOne(doc); //intenta insertar la recomendacion
+        } catch (MongoWriteException e) {
+            //si ya existe la recomendacion no se hace nada
         }
 
     }
 
     public Vector filtroContenido(Vector competenciass) throws UnknownHostException {
-        Vector<Video> datos = new Vector();
+        Vector<Video> datos = new Vector(); //vector que almacenara los datos
         if (competenciass.isEmpty()) {
-            return datos;
+            return datos; //si no se tiene competencias para analizar se retorna el vector vacio
         } else {
             int numdislikes = 30; //numero maximo de dislikes del video
-            DBCollection coll = obtenerColeccion("videos"); //descripciones guardadas en coll
-            BasicDBList or = new BasicDBList();
+            MongoCollection<Document> coll = obtenerColeccion("videos"); //descripciones guardadas en coll
+            BasicDBList or = new BasicDBList(); //lista de las competencias 
 
             for (int i = 0; i < competenciass.size(); i++) {
-                DBObject clause = new BasicDBObject("competencias", competenciass.get(i));
-                or.add(clause);
+                DBObject clause = new BasicDBObject("competencias", competenciass.get(i)); //se obtiene las competencias
+                or.add(clause);//se añaden a la lista
             }
 
-            DBObject query = new BasicDBObject("$or", or).append("dislike", new BasicDBObject("$lt", numdislikes));;
-            DBCursor cursor = coll.find(query);
+            Document query = new Document("$or", or).append("dislike", new BasicDBObject("$lt", numdislikes));//se arma la sentencia de busqueda            
+            MongoCursor<Document> cursor = coll.find(query).iterator(); //resultados de la base de datos
             int i = 1;
 
-            while (cursor.hasNext()) {
-                DBObject obj = cursor.next();
+            while (cursor.hasNext()) {//se asignan los datos obtenidos a la lista de videos
+                Document obj = cursor.next();
                 Video p = new Video();
-                p.setId((String) obj.get("_id").toString());
-                p.setIid((String) obj.get("Id"));
+                p.setId((String) obj.get("Id"));
                 p.setNombre((String) obj.get("nombre"));
                 String competencias = (String) obj.get("competencias").toString();
                 String[] tokens;
@@ -128,91 +143,14 @@ public class Manejador {
         }
     }
 
-    public static String[] parsearTexto(String actores) {
-        String actores4 = actores.replaceAll("\"", "");
-        String actores5 = actores4.replaceAll(" ", "");
-        String actores6 = actores5.replace("[", "");
-        String actores7 = actores6.replace("]", "");
+    public static String[] parsearTexto(String texto) {
+        String texto4 = texto.replaceAll("\"", "");
+        String texto5 = texto4.replaceAll(" ", "");
+        String texto6 = texto5.replace("[", "");
+        String texto7 = texto6.replace("]", "");
         String[] tokens;
-        tokens = actores7.split(",");
+        tokens = texto7.split(",");
         return tokens;
-    }
-
-    public void insertarDocumento(String id1, String id2, double sim) throws UnknownHostException {
-        //System.out.println("entro al metodo");
-        BasicDBObject doc = new BasicDBObject();
-        doc.append("id1", id1);
-        doc.append("id2", id2);
-        doc.append("similitud", sim);
-
-        BasicDBObject doc2 = new BasicDBObject();
-        doc2.append("id1", 1);
-        doc2.append("id2", 1);
-        doc2.append("similitud", sim);
-
-        DBCollection coll1 = getConexion().getCollection("similitudes");
-        coll1.ensureIndex(doc2, new BasicDBObject("unique", true));
-
-        try {
-            coll1.insert(doc);
-        } catch (MongoException.DuplicateKey e) {
-
-        }
-
-    }
-
-    public Vector obtenerCompetencias2(int idUsuario) throws UnknownHostException {
-        DBCollection coll1 = getConexion().getCollection("usuarios");
-        Vector competencias = new Vector();
-        DBObject usuario = new BasicDBObject("_id", idUsuario);
-        DBCursor cursor = coll1.find(usuario);
-        DBObject obj = cursor.next();
-        /**
-         *
-         */
-        for (DBObject doc : cursor) {
-            DBObject competencia = (BasicDBObject) doc.get("competencia1");
-            if (competencia.get("value").equals(1)) {
-                competencias.add(competencia.get("Id").toString());
-            }
-        }
-        for (DBObject doc : cursor) {
-            DBObject competencia = (BasicDBObject) doc.get("competencia2");
-            if (competencia.get("value").equals(1)) {
-                competencias.add(competencia.get("Id").toString());
-            }
-        }
-        for (DBObject doc : cursor) {
-            DBObject competencia = (BasicDBObject) doc.get("competencia3");
-            if (competencia.get("value").equals(1)) {
-                competencias.add(competencia.get("Id").toString());
-            }
-        }
-        for (DBObject doc : cursor) {
-            DBObject competencia = (BasicDBObject) doc.get("competencia4");
-            if (competencia.get("value").equals(1)) {
-                competencias.add(competencia.get("Id").toString());
-            }
-        }
-        for (DBObject doc : cursor) {
-            DBObject competencia = (BasicDBObject) doc.get("competencia5");
-            if (competencia.get("value").equals(1)) {
-                competencias.add(competencia.get("Id").toString());
-            }
-        }
-        for (DBObject doc : cursor) {
-            DBObject competencia = (BasicDBObject) doc.get("competencia6");
-            if (competencia.get("value").equals(1)) {
-                competencias.add(competencia.get("Id").toString());
-            }
-        }
-        competencias.add(obj.get("deficit1").toString());
-        competencias.add(obj.get("deficit2").toString());
-
-        System.out.println("*********************************");
-        System.out.println("Competencias Usuario: " + competencias);
-
-        return competencias;
     }
 
     public Vector obtenersimilcomp(Vector competencias, double umbralSimilitud) throws UnknownHostException {
@@ -226,26 +164,26 @@ public class Manejador {
 
             BasicDBList or = new BasicDBList();
             for (int i = 0; i < competencias.size(); i++) {
-                DBObject clause = new BasicDBObject("id1", competencias.get(i));
-                DBObject clause2 = new BasicDBObject("id2", competencias.get(i));
+                DBObject clause = new BasicDBObject("idC1", competencias.get(i));
+                DBObject clause2 = new BasicDBObject("idC2", competencias.get(i));
                 or.add(clause);
                 or.add(clause2);
             }
-            DBObject query = new BasicDBObject("$or", or).append("similitud", new BasicDBObject("$gt", umbralSimilitud));
-            DBCollection coll2 = getConexion().getCollection("similitudes");
-            DBCursor cursor2 = coll2.find(query, new BasicDBObject("id2", true).append("id1", true).append("_id", false)); //de los docmentos encontrados, eliminamos _id de cada documento porque no lo necesitamos, y dejamos sólo id1 e id2
+            Document query = new Document("$or", or).append("similitud", new BasicDBObject("$gt", umbralSimilitud));
+            MongoCollection<Document> coll2 = getConexion().getCollection("similitudes");
+            MongoCursor<Document> cursor2 = coll2.find(query).iterator(); //de los docmentos encontrados, eliminamos _id de cada documento porque no lo necesitamos, y dejamos sólo id1 e id2
 
             int n = 0;
             while (cursor2.hasNext()) {
-                DBObject obj1 = cursor2.next();
-                if (competencias.contains(obj1.get("id1"))) {
+                Document obj1 = cursor2.next();
+                if (competencias.contains(obj1.get("idC1"))) {
                 } else {
-                    competenciassimil.add(obj1.get("id1").toString());
+                    competenciassimil.add(obj1.get("idC1").toString());
                 }
 
-                if (competencias.contains(obj1.get("id2"))) {
+                if (competencias.contains(obj1.get("idC2"))) {
                 } else {
-                    competenciassimil.add(obj1.get("id2").toString());
+                    competenciassimil.add(obj1.get("idC2").toString());
                 }
 
                 n++;
@@ -260,27 +198,23 @@ public class Manejador {
         }
     }
 
-    public Vector obtenerCompetencias3(int idUsuario) throws UnknownHostException {
-        DBCollection coll1 = getConexion().getCollection("usuarios");
+    public Vector obtenerCompetencias(int idUsuario) throws UnknownHostException {
+        MongoCollection<Document> coll1 = getConexion().getCollection("usuarios");
         Vector competencias = new Vector();
-        DBObject usuario = new BasicDBObject("_id", idUsuario);
-        DBCursor cursor = coll1.find(usuario);
-        DBObject obj = cursor.next();
+        Document usuario = new Document("_id", idUsuario);
+        MongoCursor<Document> cursor = coll1.find(usuario).iterator();
+        Document obj = cursor.next();
         /**
          *
          */
-        for (DBObject doc : cursor) {
-            BasicDBList comps = (BasicDBList) doc.get("competencias");
-            /* if (competencia.get("value").equals(1)) {
-             competencias.add(competencia.get("Id").toString());
-             }*/
-            for (int i = 0; i < comps.size(); i++) {
-                BasicDBObject competencia = (BasicDBObject) comps.get(i);
 
-                if (Float.parseFloat(competencia.get("value").toString()) < 3.5) {
+        List comps = (List) obj.get("competencias");
+        for (int i = 0; i < comps.size(); i++) {
+            Document competencia = (Document) comps.get(i);
 
-                    competencias.add(competencia.get("Id"));
-                }
+            if (Float.parseFloat(competencia.get("value").toString()) < 3.5) {
+
+                competencias.add(competencia.get("Id"));
             }
         }
 
@@ -291,113 +225,91 @@ public class Manejador {
         return competencias;
     }
 
-    /*public Vector obtenerTopSimilitudes(Vector competencias, double umbralSimilitud) throws UnknownHostException {
-     System.out.println("top simil");
-     BasicDBList or = new BasicDBList();
-     for (int i = 0; i < competencias.size(); i++) {        
-     DBObject clause = new BasicDBObject("id1", competencias.get(i));
-     DBObject clause2 = new BasicDBObject("id2", competencias.get(i));
-     or.add(clause);
-     or.add(clause2);
-     }        
-     DBObject query = new BasicDBObject("$or",or).append("similitud", new BasicDBObject("$gt",umbralSimilitud));
-     DBCollection coll1=getConexion().getCollection("similitudes");    
-     DBCursor cursor=coll1.find(query,new BasicDBObject("id2", true).append("id1", true).append("_id", false)); //de los docmentos encontrados, eliminamos _id de cada documento porque no lo necesitamos, y dejamos sólo id1 e id2
-     Vector topsimilitudes=new Vector();
-     int i=0;
-     while (cursor.hasNext()){
-     DBObject obj=cursor.next();
-     if(topsimilitudes.contains(obj.get("id1"))){
-     }else{
-     topsimilitudes.add(obj.get("id1"));
-     }
-            
-     if(topsimilitudes.contains(obj.get("id2"))){
-     }else{
-     topsimilitudes.add(obj.get("id2"));
-     }           
-            
-     i++;
-     }  
-     return topsimilitudes;
-     }*/
-    /**
-     * private static void obtenerRecomendaciones(int umbralRating, double
-     * umbralSimilitud) throws UnknownHostException { Manejador man=new
-     * Manejador(); DBObject query=new BasicDBObject("rating",new
-     * BasicDBObject("$gt",umbralRating)); //cadena de consulta, identificadores
-     * por encima de umbralRating Vector
-     * topratings=man.obtenerTopRating(umbralRating,query); //obtenerTopRating,
-     * los identificadores de los contenidos Top se almacenan en el vector
-     * toprating Vector recomendaciones=new Vector(); for (int i = 0; i <
-     * topratings.size(); i++) { Vector rec=new Vector(); DBObject clause1 = new
-     * BasicDBObject("id1", topratings.get(i)); DBObject clause2 = new
-     * BasicDBObject("id2", topratings.get(i)); BasicDBList or = new
-     * BasicDBList(); or.add(clause1); or.add(clause2); DBObject query1=new
-     * BasicDBObject("$or",or).append("similitud", new
-     * BasicDBObject("$gt",umbralSimilitud)); //cadena de consulta,
-     * identificadores en id1 o id2, y similitud por encima de umbralSimilitud
-     * rec=man.obtenerTopSimilitudes(topratings.get(i),umbralSimilitud,query1);
-     * //obtenerTopSimilitudes recomendaciones.add(rec); } }**
-     *
-     * /*
-     *
-     * public Vector obtenerCompetencias(int idUsuario, double umbralSimilitud)
-     * throws UnknownHostException { DBCollection coll1 =
-     * getConexion().getCollection("usuarios"); Vector competencias = new
-     * Vector(); DBObject usuario = new BasicDBObject("_id", idUsuario);
-     * DBCursor cursor = coll1.find(usuario); DBObject obj = cursor.next();
-     *
-     * if (obj.get("competencia1").equals(1)) {
-     * competencias.add("Competencia1"); }
-     *
-     * if (obj.get("competencia2").equals(1)) {
-     * competencias.add("Competencia2"); }
-     *
-     * if (obj.get("competencia3").equals(1)) {
-     * competencias.add("Competencia3"); }
-     *
-     * if (obj.get("competencia4").equals(1)) {
-     * competencias.add("Competencia4"); }
-     *
-     * if (obj.get("competencia5").equals(1)) {
-     * competencias.add("Competencia5"); }
-     *
-     * if (obj.get("competencia6").equals(1)) {
-     * competencias.add("Competencia6"); }
-     *
-     * competencias.add(obj.get("deficit1"));
-     * competencias.add(obj.get("deficit2"));
-     *
-     * /**
-     * ****************************************
-     *
-     * BasicDBList or = new BasicDBList(); for (int i = 0; i <
-     * competencias.size(); i++) { DBObject clause = new BasicDBObject("id1",
-     * competencias.get(i)); DBObject clause2 = new BasicDBObject("id2",
-     * competencias.get(i)); or.add(clause); or.add(clause2); } DBObject query =
-     * new BasicDBObject("$or", or).append("similitud", new BasicDBObject("$gt",
-     * umbralSimilitud)); DBCollection coll2 =
-     * getConexion().getCollection("similitudes"); DBCursor cursor2 =
-     * coll2.find(query, new BasicDBObject("id2", true).append("id1",
-     * true).append("_id", false)); //de los docmentos encontrados, eliminamos
-     * _id de cada documento porque no lo necesitamos, y dejamos sólo id1 e id2
-     *
-     * int n = 0; while (cursor2.hasNext()) { DBObject obj1 = cursor2.next(); if
-     * (competencias.contains(obj1.get("id1"))) { } else {
-     * competencias.add(obj1.get("id1")); }
-     *
-     * if (competencias.contains(obj1.get("id2"))) { } else {
-     * competencias.add(obj1.get("id2")); }
-     *
-     * n++; }
-     *
-     * System.out.println("Competencias: " + competencias);
-     *
-     * /**
-     * ***************************************
-     *
-     * return competencias; } **
-     *
-     */
+    public Vector obtenerlikes(String idUsuario) throws UnknownHostException {
+        MongoCollection<Document> coll1 = getConexion().getCollection("likes");
+        Vector videos = new Vector();
+        Document usuario = new Document("idUsuario", idUsuario);
+        MongoCursor<Document> cursor = coll1.find(usuario).iterator();
+
+        while (cursor.hasNext()) {//se asignan los datos obtenidos a la lista de videos
+            Document obj = cursor.next();
+            videos.add(obj.get("idVideo"));
+        }
+
+        /**
+         *
+         */
+        System.out.println("*********************************");
+        System.out.println("Usuario" + idUsuario);
+        System.out.println("Videos que le gustan al Usuario: " + videos);
+
+        return videos;
+    }
+
+    public Vector obtenerdislikes(String idUsuario) throws UnknownHostException {
+        MongoCollection<Document> coll1 = getConexion().getCollection("dislikes");
+        Vector videos = new Vector();
+        Document usuario = new Document("idUsuario", idUsuario);
+        MongoCursor<Document> cursor = coll1.find(usuario).iterator();
+
+        while (cursor.hasNext()) {//se asignan los datos obtenidos a la lista de videos
+            Document obj = cursor.next();
+            videos.add(obj.get("idVideo"));
+        }
+
+        /**
+         *
+         */
+        System.out.println("*********************************");
+        System.out.println("Usuario" + idUsuario);
+        System.out.println("Videos que NO le gustan al Usuario: " + videos);
+
+        return videos;
+    }
+
+    public Vector obtenersimilvideos(Vector videos, double umbralSimilitud) throws UnknownHostException {
+        Vector videossimil = new Vector();
+        if (videos.isEmpty()) {
+            return videossimil;
+        } else {
+            /**
+             * ****************************************
+             */
+
+            BasicDBList or = new BasicDBList();
+            for (int i = 0; i < videos.size(); i++) {
+                DBObject clause = new BasicDBObject("idV1", videos.get(i));
+                DBObject clause2 = new BasicDBObject("idV2", videos.get(i));
+                or.add(clause);
+                or.add(clause2);
+            }
+            Document query = new Document("$or", or).append("similitud", new BasicDBObject("$gt", umbralSimilitud));
+            MongoCollection<Document> coll2 = getConexion().getCollection("similitudesVideos");
+            MongoCursor<Document> cursor2 = coll2.find(query).iterator(); //de los docmentos encontrados, eliminamos _id de cada documento porque no lo necesitamos, y dejamos sólo id1 e id2
+
+            int n = 0;
+            while (cursor2.hasNext()) {
+                Document obj1 = cursor2.next();
+                if (videos.contains(obj1.get("idV1"))) {
+                } else {
+                    videossimil.add(obj1.get("idV1").toString());
+                }
+
+                if (videos.contains(obj1.get("idV2"))) {
+                } else {
+                    videossimil.add(obj1.get("idV2").toString());
+                }
+
+                n++;
+            }
+            System.out.println("*********************************");
+            System.out.println("Videos similares a los que le gustan: " + videossimil);
+
+            /**
+             * ***************************************
+             */
+            return videossimil;
+        }
+    }
+
 }
